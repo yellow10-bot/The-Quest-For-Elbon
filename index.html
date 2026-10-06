@@ -218,6 +218,7 @@ body.touchmode #subs{bottom:calc(170px + env(safe-area-inset-bottom,0px));font-s
 <div id="charView" class="sheet hidden" style="background:rgba(12,10,8,.92)"><div class="card" style="text-align:center;background:#1c1712;border:1px solid #5a4a36;border-radius:14px;padding:18px 26px"><h2 class="display">Your knight</h2><canvas id="charCanvas" width="360" height="440" style="width:360px;max-width:80vw;height:auto;cursor:grab;touch-action:none"></canvas><div id="wardrobe" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:6px 0 10px"></div><p id="charInfo"></p><button class="btn small" id="charClose">Close</button></div></div>
 <div id="fade"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
@@ -2334,7 +2335,7 @@ function updateAlly(dt){if(!ally.root)return;const P=ally.P;if(ally.style==='rem
  ally.root.position.copy(ally.pos);ally.root.rotation.y=ally.yaw;}
 let _allyHit=false;
 function updateRemote(dt){const m=ally.net;if(!m)return;const P=ally.P;const B=ally.buf||[];let moved=0;
- if(B.length>=2){const rt=clock.t-.12;let a=B[B.length-2],b=B[B.length-1];for(let i=0;i<B.length-1;i++){if(B[i].t<=rt&&B[i+1].t>=rt){a=B[i];b=B[i+1];break;}}const k=clamp((rt-a.t)/Math.max(.001,b.t-a.t),0,1);
+ if(B.length>=2){const rt=clock.t-(Net.mode==='supa'?.26:.12);let a=B[B.length-2],b=B[B.length-1];for(let i=0;i<B.length-1;i++){if(B[i].t<=rt&&B[i+1].t>=rt){a=B[i];b=B[i+1];break;}}const k=clamp((rt-a.t)/Math.max(.001,b.t-a.t),0,1);
   const nx=a.x+(b.x-a.x)*k,ny=a.y+(b.y-a.y)*k,nz=a.z+(b.z-a.z)*k;moved=Math.hypot(nx-ally.pos.x,nz-ally.pos.z);ally.pos.set(nx,ny,nz);let dw=((b.w-a.w+Math.PI)%TAU+TAU)%TAU-Math.PI;ally.yaw=a.w+dw*k;}
  else{const tp=new V3(m.x,m.y,m.z);moved=ally.pos.distanceTo(tp);ally.pos.lerp(tp,Math.min(1,dt*12));ally.yaw=lerpAngle(ally.yaw,m.w,Math.min(1,dt*12));}moved=moved/Math.max(.001,dt)/15;ally.zone=m.zn||player.zone;
  ally.blockT=m.bl?1:0;if(!ally.up){P.body.position.y=lerp(P.body.position.y,-.42,dt*6);P.torso.rotation.x=lerp(P.torso.rotation.x,.55,dt*6);}else{P.body.position.y=lerp(P.body.position.y,0,dt*6);P.torso.rotation.x=lerp(P.torso.rotation.x,.08,dt*6);animLegs(ally,clamp(moved*15/4,0,1),dt,moved*15);}
@@ -2344,6 +2345,7 @@ function updateRemote(dt){const m=ally.net;if(!m)return;const P=ally.P;const B=a
 // =====================================================================
 //  ONLINE CO-OP (host's browser runs the world; friends join with a code)
 // =====================================================================
+const SUPA={url:'https://wvfheqenimkhxznnuuia.supabase.co',key:'sb_publishable_PDt2M1yUQx4E8vIwPiOhtg_2MO_amRt'};
 const Net={mode:'peer',groom:null,lobby:null,out:[],evq:[],evSeq:0,seenSeq:new Map(),myPeer:null,hostPeer:null,welT:new Map(),role:'solo',id:'h',code:'',name:'Hero',peer:null,conns:new Map(),chan:null,remotes:new Map(),puppets:new Map(),enemyMap:new Map(),nid:1,sendT:0,snapT:0,last:{},offset:0,status:'',
  log(t){this.status=t;const el=$('#netStatus');if(el)el.textContent=t;},
  isClient(){return this.role==='client';},isHost(){return this.role==='host';},
@@ -2351,7 +2353,7 @@ const Net={mode:'peer',groom:null,lobby:null,out:[],evq:[],evSeq:0,seenSeq:new M
  useLocal(){return new URLSearchParams(location.search).get('net')==='local'||!window.Peer;},
  // ---- transport ----
  initRoom(){this.roomP=this._initRoom();return this.roomP;},
- async _initRoom(){try{if(!window.claude||!window.claude.use)return;this.mode='none';const r=await window.claude.use('room').catch(()=>null);if(!r){this.log('Online play here needs everyone signed in to Claude and invited to this page.');return;}this.lobby=r;this.mode='room';
+ async _initRoom(){try{if(!window.claude||!window.claude.use){if(window.supabase&&!new URLSearchParams(location.search).has('net'))this.mode='supa';return;}this.mode='none';const r=await window.claude.use('room').catch(()=>null);if(!r){this.log('Online play here needs everyone signed in to Claude and invited to this page.');return;}this.lobby=r;this.mode='room';
    r.onPeers(ch=>this.renderGames(ch.peers));this.log('Online play is on. Host a game, or join one below. Friends need to be signed in to Claude and invited to this page.');}catch(e){}},
  renderGames(peers){const el=$('#netGames');if(!el)return;const games=peers.filter(p=>!p.sameTab&&p.presence&&p.presence.host);el.innerHTML='';
   for(const p of games){const b=document.createElement('button');b.className='btn small';b.textContent='Join '+String(p.presence.hn||'a friend').slice(0,14)+"'s game";b.onclick=()=>{$('#netCode').value=String(p.presence.host).slice(0,5);$('#joinBtn').click();};el.appendChild(b);}},
@@ -2369,30 +2371,40 @@ const Net={mode:'peer',groom:null,lobby:null,out:[],evq:[],evSeq:0,seenSeq:new M
   await g.presence({n:this.name});this.log('Joining '+this.code+'...');},
  host(name){return (this.roomP||Promise.resolve()).then(()=>this._host(name));},
  join(code,name){return (this.roomP||Promise.resolve()).then(()=>this._join(code,name));},
- _host(name){if(this.mode==='none')return Promise.reject('no room');this.name=name||'Host';this.role='host';this.code=Math.random().toString(36).slice(2,7).toUpperCase();if(this.mode==='room')return this.hostRoom();
+ supaChan(code){if(!this.sb)this.sb=window.supabase.createClient(SUPA.url,SUPA.key,{realtime:{params:{eventsPerSecond:40}}});return this.sb.channel('elbon-'+code.toLowerCase(),{config:{broadcast:{self:false,ack:false}}});},
+ _host(name){if(this.mode==='none')return Promise.reject('no room');this.name=name||'Host';this.role='host';this.code=Math.random().toString(36).slice(2,7).toUpperCase();
+  if(this.mode==='supa'){return new Promise((res,rej)=>{const ch=this.supaChan(this.code);this.sch=ch;ch.on('broadcast',{event:'c'},({payload})=>{if(payload&&payload.from)this.onHostMsg(payload.from,payload.msg);});
+   let done=false;ch.subscribe(st=>{if(st==='SUBSCRIBED'&&!done){done=true;this.log('Room code: '+this.code);res(this.code);}else if((st==='CHANNEL_ERROR'||st==='TIMED_OUT')&&!done){done=true;this.log('Could not open an online room. Check your internet and try again.');rej(st);}});
+   setTimeout(()=>{if(!done){done=true;this.log('Could not reach the online server. Try again in a moment.');rej('timeout');}},12000);});}if(this.mode==='room')return this.hostRoom();
   if(this.useLocal()){this.chan=new BroadcastChannel('elbon-'+this.code);this.chan.onmessage=ev=>{const m=ev.data;if(m.to&&m.to!=='h')return;if(m.from==='h')return;this.onHostMsg(m.from,m.msg);};this.log('Room code: '+this.code+' (same-computer test mode)');return Promise.resolve(this.code);}
   return new Promise((res,rej)=>{let done=false;this.peer=new Peer('elbonquest-'+this.code);
    this.peer.on('open',()=>{done=true;this.log('Room code: '+this.code);res(this.code);});
    this.peer.on('connection',conn=>{const cid='c'+(this.nid++);conn.on('open',()=>{this.conns.set(cid,conn);});conn.on('data',d=>this.onHostMsg(cid,d));conn.on('close',()=>this.dropRemote(cid));conn.on('error',()=>this.dropRemote(cid));});
    this.peer.on('error',e=>{this.log('Could not open an online room: '+(e.type||e));if(!done)rej(e);});
    setTimeout(()=>{if(!done){this.log('Online play could not reach the matchmaking server. It works once the game is on your own website.');rej('timeout');}},9000);});},
- _join(code,name){if(this.mode==='none')return Promise.reject('no room');this.name=name||'Friend';this.role='client';this.code=code.trim().toUpperCase();if(this.mode==='room')return this.joinRoom();
+ _join(code,name){if(this.mode==='none')return Promise.reject('no room');this.name=name||'Friend';this.role='client';this.code=code.trim().toUpperCase();
+  if(this.mode==='supa'){this.id='c'+Math.random().toString(36).slice(2,8);return new Promise((res,rej)=>{const ch=this.supaChan(this.code);this.sch=ch;
+   ch.on('broadcast',{event:'h'},({payload})=>{const b=payload&&payload.b;if(!Array.isArray(b))return;for(const m of b){if(m&&m.to&&m.to!==this.id)continue;this.onClientMsg(m);}});
+   let done=false;ch.subscribe(st=>{if(st==='SUBSCRIBED'&&!done){done=true;this.log('Joining '+this.code+'...');const hi=()=>{if(this.joined)return;this.send({t:'hello',name:this.name});setTimeout(hi,1000);};hi();
+     setTimeout(()=>{if(!this.joined)this.log('No game found with code '+this.code+'. Check the code, and make sure the host is still in the game.');},9000);res();}
+    else if((st==='CHANNEL_ERROR'||st==='TIMED_OUT')&&!done){done=true;this.log('Could not reach the online server. Try again in a moment.');rej(st);}});
+   setTimeout(()=>{if(!done){done=true;this.log('Could not reach the online server. Try again in a moment.');rej('timeout');}},12000);});}if(this.mode==='room')return this.joinRoom();
   if(this.useLocal()){this.id='c'+Math.random().toString(36).slice(2,7);this.chan=new BroadcastChannel('elbon-'+this.code);this.chan.onmessage=ev=>{const m=ev.data;if(m.from!=='h')return;if(m.to&&m.to!==this.id)return;this.onClientMsg(m.msg);};
    this.send({t:'hello',name:this.name});this.log('Joining '+this.code+'...');return Promise.resolve();}
   return new Promise((res,rej)=>{let done=false;this.peer=new Peer();this.peer.on('open',()=>{const conn=this.peer.connect('elbonquest-'+this.code,{reliable:true});this.conn=conn;
     conn.on('open',()=>{done=true;this.send({t:'hello',name:this.name});res();});conn.on('data',d=>this.onClientMsg(d));conn.on('close',()=>{toast('Disconnected from the host.',true);this.log('Disconnected.');});});
    this.peer.on('error',e=>{this.log('Could not join: '+(e.type||e));if(!done)rej(e);});setTimeout(()=>{if(!done){this.log('Could not reach that room. Check the code, and make sure the host is still on the title screen or in the game.');rej('timeout');}},9000);});},
- send(msg){if(this.role!=='client')return;if(this.mode==='room'){if(!this.groom)return;if(msg.t==='hello')return;
+ send(msg){if(this.role!=='client')return;if(this.mode==='supa'){if(this.sch)this.sch.send({type:'broadcast',event:'c',payload:{from:this.id,msg}});return;}if(this.mode==='room'){if(!this.groom)return;if(msg.t==='hello')return;
    if(msg.t==='p'){const st={};for(const k in msg){if(k==='t')continue;const v=msg[k];st[k]=typeof v==='number'?Math.round(v*100)/100:v;}this.groom.presence({s:st}).catch(()=>{});}
    else{this.evq.push({q:++this.evSeq,m:msg});if(this.evq.length>10)this.evq.shift();this.groom.presence({ev:this.evq}).catch(()=>{});}return;}if(this.chan)this.chan.postMessage({from:this.id,msg});else if(this.conn&&this.conn.open)this.conn.send(msg);},
- sendTo(id,msg){if(this.role!=='host')return;if(this.mode==='room'){this.out.push(Object.assign({},msg,{to:id}));return;}if(this.chan)this.chan.postMessage({from:'h',to:id,msg});else{const c=this.conns.get(id);if(c&&c.open)c.send(msg);}},
- broadcast(msg){if(this.role!=='host')return;if(this.mode==='room'){this.out.push(msg);return;}if(this.chan)this.chan.postMessage({from:'h',msg});else for(const c of this.conns.values())if(c.open)c.send(msg);},
+ sendTo(id,msg){if(this.role!=='host')return;if(this.mode==='room'||this.mode==='supa'){this.out.push(Object.assign({},msg,{to:id}));return;}if(this.chan)this.chan.postMessage({from:'h',to:id,msg});else{const c=this.conns.get(id);if(c&&c.open)c.send(msg);}},
+ broadcast(msg){if(this.role!=='host')return;if(this.mode==='room'||this.mode==='supa'){this.out.push(msg);return;}if(this.chan)this.chan.postMessage({from:'h',msg});else for(const c of this.conns.values())if(c.open)c.send(msg);},
  // ---- host side ----
  onHostMsg(cid,m){if(!m||!m.t)return;let R=this.remotes.get(cid);
-  if(m.t==='hello'){if(R)return;if(this.remotes.size>=3){this.sendTo(cid,{t:'full'});return;}R=this.addRemote(cid,m.name);this.sendTo(cid,{t:'welcome',id:cid,zone:player.zone,pos:[player.pos.x,player.pos.y,player.pos.z],stage:Quest.stage,veins:(world.harvest||[]).map(h=>h.done?1:0),col:Machine.collected});
+  if(m.t==='hello'){if(R){if(this.mode==='supa'&&!R.welcomed)this.sendTo(cid,{t:'welcome',id:cid,zone:player.zone,pos:[player.pos.x,player.pos.y,player.pos.z],stage:Quest.stage,veins:(world.harvest||[]).map(h=>h.done?1:0),col:Machine.collected});return;}if(this.remotes.size>=3){this.sendTo(cid,{t:'full'});return;}R=this.addRemote(cid,m.name);this.sendTo(cid,{t:'welcome',id:cid,zone:player.zone,pos:[player.pos.x,player.pos.y,player.pos.z],stage:Quest.stage,veins:(world.harvest||[]).map(h=>h.done?1:0),col:Machine.collected});
    toast((m.name||'A friend')+' joined the game!',true);return;}
   if(!R)return;
-  if(m.t==='p'){R.net=m;R.lastSeen=clock.t;(R.buf=R.buf||[]).push({t:clock.t,x:m.x,y:m.y,z:m.z,w:m.w});if(R.buf.length>6)R.buf.shift();if(m.ck&&!R.cloakMesh){R.cloak=m.ck;R.cloakMesh=wearCloak(R.root,R.P,m.ck);}const wasUp=R.up;R.up=!m.dn;R.hp=m.hp;if(!R.up&&wasUp)checkWipe();}
+  if(m.t==='p'){R.welcomed=true;R.net=m;R.lastSeen=clock.t;(R.buf=R.buf||[]).push({t:clock.t,x:m.x,y:m.y,z:m.z,w:m.w});if(R.buf.length>6)R.buf.shift();if(m.ck&&!R.cloakMesh){R.cloak=m.ck;R.cloakMesh=wearCloak(R.root,R.P,m.ck);}const wasUp=R.up;R.up=!m.dn;R.hp=m.hp;if(!R.up&&wasUp)checkWipe();}
   else if(m.t==='hit'){const e=this.enemyMap.get(m.e);if(e&&e.alive){_netHit=true;enemyHit(e,m.d,m.c,new V3(m.dir[0],m.dir[1],m.dir[2]),m.k,new V3(m.p[0],m.p[1],m.p[2]));_netHit=false;}}
   else if(m.t==='arrow'){spawnVisualArrow(m);this.broadcast(Object.assign({},m,{from:cid}));}
   else if(m.t==='vein'){const h=world.harvest[m.i];if(h&&!h.done)markVein(m.i);this.broadcast({t:'vein',i:m.i});}
@@ -2407,12 +2419,13 @@ const Net={mode:'peer',groom:null,lobby:null,out:[],evq:[],evSeq:0,seenSeq:new M
   const R=makeAlly(name||'Friend','remote',player.pos.clone().add(new V3(1.5,0,1.5)),[0,0],10);R.netId=cid;R.lastSeen=clock.t;R.zone=player.zone;const prev=ally;ally=R;initOneAlly();ally=prev;allies.push(R);this.remotes.set(cid,R);return R;},
  dropRemote(cid){const R=this.remotes.get(cid);if(!R)return;this.remotes.delete(cid);this.conns.delete(cid);scene.remove(R.root);allies.splice(allies.indexOf(R),1);toast(R.name+' left the game.');
   const back=(this.parked||[]).pop();if(back){back.parked=false;back.root.visible=true;allies.push(back);const prev=ally;ally=back;placeAllyNearPlayer();ally=prev;}},
- hostTick(dt){if(!this.isHost())return;this.snapT-=dt;if(this.snapT>0)return;this.snapT=.066;
+ hostTick(dt){if(!this.isHost())return;this.snapT-=dt;if(this.snapT>0)return;this.snapT=this.mode==='supa'?.125:.066;
   const pl=[{id:'h',ck:(myCloak()||{}).color||0,n:this.name,x:player.pos.x,y:player.pos.y,z:player.pos.z,w:player.yaw+Math.PI,hp:player.hp,mh:player.maxHp,up:!player.down&&player.alive?1:0,s:'player',sw:VMS.swingT>=0?1:0,bw:bowState.drawing?1:0}];
   for(const A of allies){if(!A.root)continue;pl.push({id:A.netId||A.name,ck:A.cloak||0,n:A.name,x:A.pos.x,y:A.pos.y,z:A.pos.z,w:A.yaw,hp:A.hp,mh:A.maxHp,up:A.up?1:0,s:A.style==='remote'?'player':A.style,sw:A.mode==='swing'?1:0,bw:A.mode==='aim'?1:0});}
   const en=[];const ppl=[player.pos,...[...this.remotes.values()].map(R=>R.pos)];const dmin=e=>Math.min(...ppl.map(p=>e.pos.distanceToSquared(p)));const ens=enemies.filter(e=>e.nid).sort((a,b)=>dmin(a)-dmin(b)).slice(0,32);for(const e of ens){en.push([e.nid,e.type,e.fiery?1:0,+e.pos.x.toFixed(2),+e.pos.y.toFixed(2),+e.pos.z.toFixed(2),+e.yaw.toFixed(2),e.state,e.alive?1:0,e.dying>=0?1:0,+(e.prime||0).toFixed(2),e.hitT>0?1:0]);}
   this.broadcast({t:'s',pl,en,ht:clock.t,st:Quest.stage,ob:(this.last.obj||'').slice(0,400),rd:(this.last.raid||'').slice(0,200),g:player.gold,z:player.zone,col:Machine.collected});
   if(this.mode!=='room'){for(const [cid,R] of this.remotes){if(clock.t-R.lastSeen>15)this.dropRemote(cid);}}else{for(const [cid,R] of this.remotes){if(R.leftAt&&clock.t-R.leftAt>4)this.dropRemote(cid);}}
+  if(this.mode==='supa'&&this.sch&&this.out.length){this.sch.send({type:'broadcast',event:'h',payload:{b:this.out.splice(0)}});}
   if(this.mode==='room'&&this.groom&&this.out.length){const q=this.out.splice(0);let batch=[],size=8;const flush=()=>{if(batch.length)this.groom.emit('t',{b:batch}).catch(()=>{});batch=[];size=8;};
    for(const m of q){const n=JSON.stringify(m).length+1;if(n>3800)continue;if(size+n>3800)flush();batch.push(m);size+=n;}flush();}},
  // ---- client side ----
@@ -2435,12 +2448,12 @@ const Net={mode:'peer',groom:null,lobby:null,out:[],evq:[],evSeq:0,seenSeq:new M
   else if(m.t==='gone'){const it=interactables.find(x=>x.pid===m.pid);if(it){it.done=true;if(it.obj)it.obj.visible=false;}}
   else if(m.t==='toast'){toast(m.m,m.b);}
   else if(m.t==='wipe'){player.pos.set(m.p[0],m.p[1],m.p[2]);player.vel.set(0,0,0);if(player.down||!player.alive){player.down=false;player.alive=true;$('#downmsg').classList.add('hidden');}player.hp=player.maxHp;updateHUD();}},
- interp(){const S=this.snaps;if(!S||S.length<2)return;const rt=clock.t+this.offset-.13;let a=S[S.length-2],b=S[S.length-1];for(let i=0;i<S.length-1;i++){if(S[i].t<=rt&&S[i+1].t>=rt){a=S[i];b=S[i+1];break;}}
+ interp(){const S=this.snaps;if(!S||S.length<2)return;const rt=clock.t+this.offset-(this.mode==='supa'?.24:.13);let a=S[S.length-2],b=S[S.length-1];for(let i=0;i<S.length-1;i++){if(S[i].t<=rt&&S[i+1].t>=rt){a=S[i];b=S[i+1];break;}}
   const k=clamp((rt-a.t)/Math.max(.001,b.t-a.t),0,1);const la=(x,y)=>x+(y-x)*k;const ang=(x,y)=>{let d=((y-x+Math.PI)%TAU+TAU)%TAU-Math.PI;return x+d*k;};
   const ma=new Map(a.pl.map(p=>[p.id,p]));for(const q of b.pl){const P=this.puppets.get(q.id);if(!P)continue;const p=ma.get(q.id)||q;const nx=la(p.x,q.x),ny=la(p.y,q.y),nz=la(p.z,q.z);
    P.A.spd=Math.hypot(nx-P.A.pos.x,nz-P.A.pos.z)/Math.max(.001,clock.dt||.016);P.A.pos.set(nx,ny,nz);P.A.yaw=ang(p.w,q.w);}
   const ea=new Map(a.en.map(r=>[r[0],r]));for(const r of b.en){const e=this.enemyMap.get(r[0]);if(!e||!e.tp)continue;const o=ea.get(r[0])||r;e.tp.set(la(o[3],r[3]),la(o[4],r[4]),la(o[5],r[5]));e.tyaw=ang(o[6],r[6]);e.smooth=true;}},
- clientTick(dt){if(!this.isClient()||!this.joined)return;this.interp();this.sendT-=dt;if(this.sendT>0)return;this.sendT=.05;
+ clientTick(dt){if(!this.isClient()||!this.joined)return;this.interp();this.sendT-=dt;if(this.sendT>0)return;this.sendT=this.mode==='supa'?.15:.05;
   const ck=myCloak();this.send({t:'p',ck:ck?ck.color:0,x:player.pos.x,y:player.pos.y,z:player.pos.z,w:player.yaw+Math.PI,hp:player.hp,dn:player.down?1:0,sw:VMS.swingT>=0?1:0,bw:bowState.drawing?1:0,bl:(player.weapon==='sword'&&mouse.L&&player.shieldBroken<=0)?1:0,zn:player.zone});
 }
 };
