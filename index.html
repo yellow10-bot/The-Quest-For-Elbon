@@ -3230,7 +3230,7 @@ function colPush(Z,P,r,h){const feet=P.pos.y,y0=feet+STEP-.04+r,y1=Math.max(y0,f
 const GOFF=[[0,0],[.22,0],[-.22,0],[0,.22],[0,-.22],[.16,.16],[-.16,.16],[.16,-.16],[-.16,-.16]];
 function colGround(Z,x,z,fromY,toY){let best=-1e9;_cbox.min.set(x-.25,toY-.05,z-.25);_cbox.max.set(x+.25,fromY+.05,z+.25);colCands(Z,_cbox,_cands);if(!_cands.length)return best;
  _gRay.near=0;_gRay.far=fromY-toY;_gRay.firstHitOnly=true;
- for(const E of _cands){for(const [ox,oz] of GOFF){_go.set(x+ox,fromY,z+oz);_gRay.set(_go,DOWN);_gRay.far=fromY-toY;_gh.length=0;E.o.raycast(_gRay,_gh);
+ const gs=VR.on?.35:1;for(const E of _cands){for(const [ox,oz] of GOFF){_go.set(x+ox*gs,fromY,z+oz*gs);_gRay.set(_go,DOWN);_gRay.far=fromY-toY;_gh.length=0;E.o.raycast(_gRay,_gh);
    for(const q of _gh){if(q.point.y<=best||!q.face)continue;_gn.copy(q.face.normal).transformDirection(E.o.matrixWorld);if(_gn.y>.7)best=q.point.y;}}}
  return best;}
 function collidePlayer(r){for(const c of circles){if(c.zone!==player.zone||c.mesh||(c.ymax!==undefined&&player.pos.y>c.ymax))continue;const dx=player.pos.x-c.x,dz=player.pos.z-c.z,d=Math.hypot(dx,dz),m=c.r+r;if(d<m&&d>1e-5){player.pos.x+=dx/d*(m-d);player.pos.z+=dz/d*(m-d);}}
@@ -3399,7 +3399,7 @@ const VR={on:false,supported:false,ready:false,base:null,rigPos:new V3(),rigYaw:
 window._vrT=m=>{VR.toast=m;VR.toastT=clock.t+3.5;};
 const _vq=new THREE.Quaternion(),_va=new V3(),_vb=new V3(),_vc=new V3();
 function vrCheck(){try{if(navigator.xr&&navigator.xr.isSessionSupported)navigator.xr.isSessionSupported('immersive-vr').then(ok=>{VR.supported=ok;document.querySelectorAll('.vrBtn').forEach(b=>b.style.display=ok?'':'none');}).catch(()=>{});}catch(e){}}
-function vrInit(){if(VR.ready)return;VR.ready=true;renderer.xr.enabled=true;renderer.xr.setReferenceSpaceType('local-floor');try{renderer.xr.setFramebufferScaleFactor(.9);}catch(e){}
+function vrInit(){if(VR.ready)return;VR.ready=true;renderer.xr.enabled=true;renderer.xr.setReferenceSpaceType('local-floor');try{renderer.xr.setFramebufferScaleFactor(.75);}catch(e){}try{renderer.xr.setFoveation(1);}catch(e){}
  for(let i=0;i<2;i++){const c=renderer.xr.getController(i),g=renderer.xr.getControllerGrip(i);scene.add(c);scene.add(g);
   c.addEventListener('connected',e=>{const k=e.data.handedness==='left'?'L':'R';VR.ctl[k]=c;VR.grip[k]=g;c.userData.src=e.data;g.userData.k=k;if(!g.userData.built)vrBuildHand(k,g);});
   c.addEventListener('disconnected',()=>{});}
@@ -3410,10 +3410,12 @@ function vrBuildHand(k,g){g.userData.built=true;const h=buildHandVM(k==='L'?0:1)
  h.scale.setScalar(VR_HAND_S);h.rotation.set(-Math.PI/4,0,0);h.position.set(0,-.01,.05);g.add(h);VR.hand[k]=h;}
 async function vrEnter(){if(!navigator.xr)return;vrInit();if(!started){beginAt(pendingLevel);pendingLevel=null;}
  try{const s=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});await renderer.xr.setSession(s);}catch(e){toast('Could not start VR: '+(e&&e.message||e));}}
-function vrStart(){VR.on=true;VR.base=renderer.xr.getReferenceSpace();VR.rigPos.set(player.pos.x,player.pos.y,player.pos.z);VR.rigYaw=player.yaw;freeLook=true;setPaused(false);VM.visible=false;
+function vrStart(){VR.on=true;VR.standH=0;VR.lastRig=null;VR.far0=camera.far;camera.far=240;camera.updateProjectionMatrix();
+ VR.grass=[];scene.traverse(o=>{if(o.isInstancedMesh&&o.material===GRASS_MAT){o.userData.c0=o.count;o.count=Math.floor(o.count*.3);VR.grass.push(o);}});
+ VR.shadow0=renderer.shadowMap.autoUpdate;sun.castShadow=false;VR.base=renderer.xr.getReferenceSpace();VR.rigPos.set(player.pos.x,player.pos.y,player.pos.z);VR.rigYaw=player.yaw;freeLook=true;setPaused(false);VM.visible=false;
  VR.saveTM=[renderer.toneMapping,renderer.outputEncoding];renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMappingExposure=finalPass?finalPass.uniforms.exposure.value*1.1:1;
  vrApplyRig();renderer.setAnimationLoop((t)=>{VR.frames=(VR.frames||0)+1;frame(t,true);});}
-function vrEnd(){VR.on=false;renderer.setAnimationLoop(null);if(VR.saveTM){renderer.toneMapping=VR.saveTM[0];renderer.outputEncoding=VR.saveTM[1];}renderer.toneMappingExposure=1;
+function vrEnd(){VR.on=false;camera.far=VR.far0||700;camera.updateProjectionMatrix();for(const o of (VR.grass||[]))o.count=o.userData.c0;if(player.zone==='out')sun.castShadow=true;renderer.setAnimationLoop(null);if(VR.saveTM){renderer.toneMapping=VR.saveTM[0];renderer.outputEncoding=VR.saveTM[1];}renderer.toneMappingExposure=1;
  for(const k of ['L','R']){if(VR.vis[k]&&VR.vis[k].obj.parent)VR.vis[k].obj.parent.remove(VR.vis[k].obj);VR.vis[k]=null;}if(VR.panel)VR.panel.m.visible=false;resize();setPaused(true);}
 // put the game world around you: your room is moved so your head is where the game says you are
 function vrApplyRig(){if(!VR.base||typeof XRRigidTransform==='undefined')return;const T=new THREE.Matrix4().makeRotationY(VR.rigYaw).setPosition(VR.rigPos).invert();const p=new V3(),q=new THREE.Quaternion(),s=new V3();T.decompose(p,q,s);
@@ -3427,7 +3429,7 @@ function vrPre(dt){const ses=renderer.xr.getSession();if(!ses)return;
  try{renderer.xr.updateCamera(camera);}catch(e){}const hw=VR.head.copy(camera.position);camera.getWorldDirection(_va);player.yaw=Math.atan2(-_va.x,-_va.z);player.pitch=Math.asin(clamp(_va.y,-1,1));
  // walking around your room moves you in the game (walls still stop you)
  VR.walk.set(hw.x-player.pos.x,0,hw.z-player.pos.z);if(VR.walk.length()>.8)VR.walk.set(0,0,0);
- keys.KeyC=(hw.y-player.pos.y)<1.1;  // crouch for real to squeeze under things
+ {const hh=hw.y-VR.rigPos.y;VR.standH=Math.max(VR.standH*.9995,hh);keys.KeyC=VR.standH>.9&&hh<VR.standH*.68;}  // crouch for real to squeeze under things
  const L=VR.btn.L,R=VR.btn.R;VR.mx=Math.abs(L.ax||0)>.15?L.ax:0;VR.my=Math.abs(L.ay||0)>.15?-L.ay:0;
  if(L.stickDown)VR.sprint=!VR.sprint;if(Math.hypot(VR.mx,VR.my)<.2)VR.sprint=false;
  VR.snapCd-=dt;if(VR.snapCd<=0&&Math.abs(R.ax||0)>.7){const d=-Math.sign(R.ax)*Math.PI/6;VR.snapCd=.3;const dx=VR.rigPos.x-hw.x,dz=VR.rigPos.z-hw.z,c=Math.cos(d),sn=Math.sin(d);VR.rigPos.x=hw.x+dx*c+dz*sn;VR.rigPos.z=hw.z-dx*sn+dz*c;VR.rigYaw+=d;}
@@ -3439,7 +3441,8 @@ function vrHighFive(){if(!player.alive)return;const list=Net.isClient()?[...Net.
   for(const k of ['L','R']){if(!VR.grip[k]||VR.pp[k].distanceTo(hp)>.32||VR.vel[k].length()<1.1)continue;
    SFX.play('grab',hp,.9);burst(hp.clone(),40,COL.gold,3,.7,.12,.02);flash(hp.clone(),0xffd77a,3,4,.3);vrBuzz(k,1,90);
    if(Net.isClient()){if(!A.revSent||clock.t-A.revSent>1){A.revSent=clock.t;Net.send({t:'rev',target:A.netId,dt:2.2});}}else{A.reviveProg=1;reviveAlly(A);}break;}}}
-function vrPost(dt){const h=VR.head;VR.rigPos.x+=player.pos.x-h.x;VR.rigPos.z+=player.pos.z-h.z;VR.rigPos.y=player.pos.y;vrApplyRig();vrUI(dt);}
+function vrPost(dt){const h=VR.head;VR.rigPos.x+=player.pos.x-h.x;VR.rigPos.z+=player.pos.z-h.z;const dy=player.pos.y-VR.rigPos.y;VR.rigPos.y=Math.abs(dy)>.7||!player.onGround?player.pos.y:VR.rigPos.y+dy*Math.min(1,dt*10);
+ sun.castShadow=false;const L=VR.lastRig;if(!L||Math.abs(L.x-VR.rigPos.x)>4e-4||Math.abs(L.y-VR.rigPos.y)>4e-4||Math.abs(L.z-VR.rigPos.z)>4e-4||L.w!==VR.rigYaw){VR.lastRig={x:VR.rigPos.x,y:VR.rigPos.y,z:VR.rigPos.z,w:VR.rigYaw};vrApplyRig();}}
 function vrItemIn(k){if(heldBow())return (VR.bowHand||'L')===k?'bow':null;const it=player.held[k];return it?it.t:null;}
 function vrAtBack(k){const hp=VR.pp[k],hd=VR.head;const fx=-Math.sin(player.yaw),fz=-Math.cos(player.yaw);const lx=hp.x-hd.x,ly=hp.y-hd.y,lz=hp.z-hd.z;return (lx*fx+lz*fz)<-.02&&ly>-.4&&Math.hypot(lx,lz)<.55;}
 function vrHand(k,dt){const b=VR.btn[k],t=vrItemIn(k);vrSyncVis(k);
@@ -3528,8 +3531,8 @@ function vrUI(dt){return;const P=VR.panel;if(!P)return;camera.getWorldDirection(
 document.querySelectorAll('.vrBtn').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();if(!$('#start').textContent.includes('Begin')&&!started)return;vrEnter();}));
 vrCheck();window.__VR=VR;VR.renderer=renderer;VR.enter=vrEnter;VR.dbg=()=>({paused,started,ended,freeLook,frames:VR.frames,grips:Object.keys(VR.grip),ctl:Object.keys(VR.ctl),btnL:Object.keys(VR.btn.L).length});
 
-function frame(now,xr){if(!xr)requestAnimationFrame(frame);if(VR.on&&!xr)return;let dt=Math.min(.05,(now-clock.last)/1000);clock.last=now;
- frameAvg=lerp(frameAvg,dt*1000,.05);perfT+=dt;if(perfT>3&&started){perfT=0;if(frameAvg>26&&DPR>.7){DPR=Math.max(.7,DPR-.15);resize();}}
+function frame(now,xr){if(!xr)requestAnimationFrame(frame);if(VR.on&&!xr)return;let dt=Math.max(0,Math.min(.05,(now-clock.last)/1000));clock.last=now;
+ frameAvg=lerp(frameAvg,dt*1000,.05);perfT+=dt;if(perfT>3&&started&&!VR.on){perfT=0;if(frameAvg>26&&DPR>.7){DPR=Math.max(.7,DPR-.15);resize();}}
  if(!paused&&!ended){clock.t+=dt;timeU.value+=dt;if(started){if(VR.on)vrPre(dt);update(dt);if(VR.on)vrPost(dt);}else titleCam(dt);}
  FX.update(paused?0:dt);SMOKE.update(paused?0:dt);updateFlash(dt);updateAnchors(dt,camera.position,player.zone,clock.t);Music.tick();
  {const inB=player.zone==='out'&&inBossX(player.pos.x),inW=player.zone==='out'&&player.pos.x<-400;const reg=inB?2:inW?1:0;if(world.woodGroup&&world.region!==reg){world.region=reg;world.inWood=inW;for(const c of OUT.children)c.visible=c.userData.itemRegion!==undefined?c.userData.itemRegion===reg:c===world.bossGroup?inB:(c===world.woodGroup)?inW:!(inW||inB);}}
