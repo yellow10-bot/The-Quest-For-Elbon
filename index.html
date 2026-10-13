@@ -3367,7 +3367,7 @@ function update(dt){clock.dt=dt;const t=clock.t;
   if(world.fieldSword&&world.fieldSword.visible&&Math.random()<.15){const p=world.fieldSword.position;FX.emit(p.x+rand(-.1,.1),p.y+rand(-.3,.3),p.z,0,.3,0,.6,.15,.01,COL.gold[0],COL.gold[1],COL.gold[2]);}
   if(Quest.stage==='trap'&&Math.random()<.4){const tp=world.trapPos;FX.emit(tp.x+rand(-1.2,1.2),tp.y+.15,tp.z+rand(-1.2,1.2),0,.6,0,.8,.12,.02,COL.gold[0],COL.gold[1],COL.gold[2]);}}
  // interact prompt
- const it=player.alive?nearestInteract():null;setHighlight(it&&ITEM_NAME[it.kind]&&it.obj?it.obj:null);const pr=$('#prompt');if(it){pr.classList.remove('hidden');pr.innerHTML=`<span class="k">E</span> ${(Touch.on?'Tap E: ':'')}${typeof it.label==='function'?it.label():it.label}`;}
+ const it=player.alive?nearestInteract():null;if(VR.on){const v=VR.hl.R||VR.hl.L;setHighlight(v&&v.obj?v.obj:null);}else setHighlight(it&&ITEM_NAME[it.kind]&&it.obj?it.obj:null);const pr=$('#prompt');if(it){pr.classList.remove('hidden');pr.innerHTML=`<span class="k">E</span> ${(Touch.on?'Tap E: ':'')}${typeof it.label==='function'?it.label():it.label}`;}
  else if(!(player.hands.L&&player.hands.R)&&player.zone==='out'){ray.setFromCamera({x:0,y:0},camera);ray.far=4;let hov=null;for(const k of ['blue','orange']){const s=world.stones[k];if(!s.taken&&ray.intersectObject(s.g,true).length)hov=k;}
   if(hov){pr.classList.remove('hidden');pr.innerHTML=`Click to grab the ${hov} stone with ${!player.hands.L&&!player.hands.R?'either hand':(!player.hands.L?'your left hand (left click)':'your right hand (right click)')}`;}else pr.classList.add('hidden');}
  else pr.classList.add('hidden');
@@ -3395,7 +3395,7 @@ function titleCam(dt){titleT+=dt;const c=world.campfire||new V3(4,0,-22);const a
 //  hold the bow in one hand and pull the string back with the other, raise the shield, drink by lifting a potion to your mouth.
 // =====================================================================
 const VR={on:false,supported:false,ready:false,base:null,rigPos:new V3(),rigYaw:0,ctl:{},grip:{},hand:{},vis:{L:null,R:null},btn:{L:{},R:{}},pp:{L:new V3(),R:new V3()},vel:{L:new V3(),R:new V3()},
- walk:new V3(),mx:0,my:0,sprint:false,snapCd:0,bowHand:null,draw:null,tip:{},hitCd:new Map(),shUp:{L:false,R:false},head:new V3(),panel:null,toast:'',toastT:0,swT:0,arrowVis:{}};
+ walk:new V3(),mx:0,my:0,gripUsed:{L:false,R:false},holding:{L:false,R:false},hl:{L:null,R:null},hlPrev:{L:null,R:null},sprint:false,snapCd:0,bowHand:null,draw:null,tip:{},hitCd:new Map(),shUp:{L:false,R:false},head:new V3(),panel:null,toast:'',toastT:0,swT:0,arrowVis:{}};
 window._vrT=m=>{VR.toast=m;VR.toastT=clock.t+3.5;};
 const _vq=new THREE.Quaternion(),_va=new V3(),_vb=new V3(),_vc=new V3();
 function vrCheck(){try{if(navigator.xr&&navigator.xr.isSessionSupported)navigator.xr.isSessionSupported('immersive-vr').then(ok=>{VR.supported=ok;document.querySelectorAll('.vrBtn').forEach(b=>b.style.display=ok?'':'none');}).catch(()=>{});}catch(e){}}
@@ -3449,13 +3449,19 @@ function vrHand(k,dt){const b=VR.btn[k],t=vrItemIn(k);vrSyncVis(k);
  const hm=VR.hand[k];if(hm){const col=player.hands[k],gm=hm.userData.gem;gm.visible=!!col;if(col){gm.material.color.set(COLHEX[col]);gm.material.emissive.set(COLHEX[col]);}const fist=!!t||(heldBow()&&VR.draw&&VR.draw.k===k);hm.userData.open.visible=!fist;hm.userData.closed.visible=fist;}
  if(!player.alive)return;
  if(!player.hands[k]){if(b.gripDown||b.trigDown)vrGrabStone(k);return;}
- if(b.gripDown){const act=t?vrFindAction(k):null;if(act){if(act.action)act.action();else pickup(act);vrBuzz(k,.5,50);}else if(t)vrRelease(k);else if(!(heldBow()&&VR.draw&&VR.draw.k===k))vrGrab(k);}else if(b.bDown&&t)vrRelease(k);
+ if(b.gripDown){VR.gripUsed[k]=false;if(t){const act=vrFindAction(k);if(act){if(act.action)act.action();else pickup(act);vrBuzz(k,.5,50);VR.gripUsed[k]=true;}else VR.holding[k]=true;}
+  else if(!(heldBow()&&VR.draw&&VR.draw.k===k)){if(vrGrab(k))VR.holding[k]=true;}}
+ else if(b.gripUp){if((t==='potZ'||t==='potX')&&VR.holding[k]&&!VR.gripUsed[k])vrRelease(k);VR.holding[k]=false;}
+ else if(b.bDown&&t){vrRelease(k);VR.holding[k]=false;}
+ // light up what this hand would grab, with a little buzz when something comes in reach
+ if(!t&&player.hands[k]){const it=vrFindItem(k,true);if(it){VR.hl[k]=it;if(VR.hlPrev[k]!==it)vrBuzz(k,.15,20);}else VR.hl[k]=null;VR.hlPrev[k]=it;}else VR.hl[k]=null;
  const t2=vrItemIn(k);VR.shUp[k]=false;
  if(t2==='sword')vrSword(k,dt);else VR.tip[k]=null;
  if(t2==='shield'){const hp=VR.pp[k],hd=VR.head;const fx=-Math.sin(player.yaw),fz=-Math.cos(player.yaw);VR.shUp[k]=((hp.x-hd.x)*fx+(hp.z-hd.z)*fz)>.2&&hp.y>hd.y-.75&&player.shieldBroken<=0;}
  if(t2==='potZ'||t2==='potX'){const m=_va.copy(VR.head);m.y-=.09;if(VR.pp[k].distanceTo(m)<.2||b.trigDown&&VR.pp[k].distanceTo(m)<.35){drink(k);vrBuzz(k,.4,80);}}
  if(heldBow()&&(VR.bowHand||'L')!==k)vrBow(k,dt);}
-function vrGrabStone(k){const hp=VR.pp[k];for(const key of ['blue','orange']){const s=world.stones[key];if(s.taken)continue;const wp=s.g.getWorldPosition(_vc);if(wp.distanceTo(hp)>.45)continue;
+function vrGrabStone(k){const hp=VR.pp[k];const c=VR.ctl[k];const org=c?c.getWorldPosition(new V3()):hp,dir=c?new V3(0,0,-1).applyQuaternion(c.getWorldQuaternion(_vq)):null;
+ for(const key of ['blue','orange']){const s=world.stones[key];if(s.taken)continue;const wp=s.g.getWorldPosition(_vc);const near=wp.distanceTo(hp)<.6;const v=wp.clone().sub(org);const aimed=dir&&v.length()<6&&v.angleTo(dir)<.3;if(!near&&!aimed)continue;
   s.taken=true;player.hands[k]=key;SFX.play('grab');burst(wp,60,COL[key],3,.8,.12,.02,{drag:2});flash(wp,COLHEX[key],5,6,.5);s.g.visible=false;const la=lightAnchors.find(a=>a.key==='stone_'+key);if(la)la.on=false;
   toast((k==='L'?'Left':'Right')+' hand is now '+key+'.');updateHUD();vrBuzz(k,.8,90);if(player.hands.L&&player.hands.R){player.canMove=true;Quest.on('stones');}return;}}
 function vrPut(k,t){const H=player.held,o=k==='L'?'R':'L';
@@ -3463,18 +3469,24 @@ function vrPut(k,t){const H=player.held,o=k==='L'?'R':'L';
  else{if(heldBow()){const bh=VR.bowHand||'L';H.L=H.R=null;if(!player.back)player.back={t:'bow'};else vrDropAt('bow',bh);}H[k]={t};}
  syncGear();}
 function vrDropAt(t,k){const it=placeItem(t,VR.pp[k].clone(),player.zone);it.obj.position.copy(VR.pp[k]);const B=it.phys;B.awake=true;B.t=0;B.v.set(0,0,0);B.w.set(rand(-2,2),0,rand(-2,2));return it;}
-function vrGrab(k){const hp=VR.pp[k];
+// what your hand can grab: anything whose real shape is within a hand's width, or something you point right at (it flies to you)
+const _vbox=new THREE.Box3();
+function vrFindItem(k,noPoint){const hp=VR.pp[k];let best=null,bd=.14;
+ for(const it of interactables){if(it.done||it.hidden||!ITEM_NAME[it.kind]||(it.cond&&!it.cond())||(it.zone&&it.zone!==player.zone)||!it.obj||!it.obj.visible&&!it.obj.parent)continue;
+  const p=it.obj.getWorldPosition(_va);if(p.distanceTo(hp)>1.6)continue;_vbox.setFromObject(it.obj);const d=_vbox.distanceToPoint(hp);if(d<bd){bd=d;best=it;}}
+ if(best||noPoint)return best;const c=VR.ctl[k];if(!c)return null;const org=c.getWorldPosition(_vb),dir=_vc.set(0,0,-1).applyQuaternion(c.getWorldQuaternion(_vq));let ba=.17;
+ for(const it of interactables){if(it.done||it.hidden||!ITEM_NAME[it.kind]||(it.cond&&!it.cond())||(it.zone&&it.zone!==player.zone)||!it.obj)continue;const p=it.obj.getWorldPosition(_va);const v=p.clone().sub(org),d=v.length();if(d>5||d<.01)continue;const a=v.angleTo(dir);if(a<ba){ba=a;best=it;}}
+ return best;}
+function vrGrab(k){
  // over your shoulder: take what's on your back
- if(vrAtBack(k)&&player.back){const t=player.back.t;player.back=null;vrPut(k,t);SFX.play('pick',null,.5);vrBuzz(k,.6,60);return;}
- let best=null,bd=.33;for(const it of interactables){if(it.done||it.hidden||!ITEM_NAME[it.kind]||(it.cond&&!it.cond())||(it.zone&&it.zone!==player.zone))continue;const p=it.obj?it.obj.getWorldPosition(_va):it.pos;const d=p.distanceTo(hp);if(d<bd){bd=d;best=it;}}
- if(!best){const c=VR.ctl[k];if(c){const org=c.getWorldPosition(_vb),dir=_vc.set(0,0,-1).applyQuaternion(c.getWorldQuaternion(_vq));let ba=.16;
-   for(const it of interactables){if(it.done||it.hidden||!ITEM_NAME[it.kind]||(it.cond&&!it.cond())||(it.zone&&it.zone!==player.zone))continue;const p=it.obj?it.obj.getWorldPosition(_va):it.pos;const v=p.clone().sub(org),d=v.length();if(d>4.5||d<.01)continue;const a=v.angleTo(dir);if(a<ba){ba=a;best=it;}}}}
+ if(vrAtBack(k)&&player.back){const t=player.back.t;player.back=null;vrPut(k,t);SFX.play('pick',null,.5);vrBuzz(k,.6,60);return true;}
+ const best=vrFindItem(k);
  if(best){if(best.pid&&Net.isHost())Net.broadcast({t:'gone',pid:best.pid});best.done=true;setHighlight(null);
   if(best.obj){if(worldItems.includes(best)){best.grabbing=true;if(best.obj.parent)best.obj.parent.remove(best.obj);}else best.obj.visible=false;}
-  if(best.kind==='shield'){player.shieldHp=3;player.shieldBroken=0;}if(best.kind==='bow')Quest.on('bow');vrPut(k,best.kind);SFX.play('pick');vrBuzz(k,.7,60);return;}
- // levers, chests, collectors: reach out and touch them
+  if(best.kind==='shield'){player.shieldHp=3;player.shieldBroken=0;}if(best.kind==='bow')Quest.on('bow');vrPut(k,best.kind);SFX.play('pick');vrBuzz(k,.7,60);return true;}
+ // levers, chests, collectors: reach out and touch them (or point at them)
  const act=vrFindAction(k);
- if(act){if(act.action)act.action();else pickup(act);vrBuzz(k,.5,50);}}
+ if(act){if(act.action)act.action();else pickup(act);vrBuzz(k,.5,50);VR.gripUsed[k]=true;}return false;}
 function vrFindAction(k){const hp=VR.pp[k];let act=null,bd=.7;for(const it of interactables){if(it.done||it.hidden||ITEM_NAME[it.kind]||(it.cond&&!it.cond()))continue;const d=it.pos.distanceTo(hp);if(d<bd){bd=d;act=it;}}
  if(!act){const c=VR.ctl[k];if(c){const org=c.getWorldPosition(_vb),dir=_vc.set(0,0,-1).applyQuaternion(c.getWorldQuaternion(_vq));let ba=.22;
   for(const it of interactables){if(it.done||it.hidden||ITEM_NAME[it.kind]||(it.cond&&!it.cond()))continue;const v=it.pos.clone().sub(org),d=v.length();if(d>3.5||d<.01)continue;const a=v.angleTo(dir);if(a<ba){ba=a;act=it;}}}}
@@ -3502,7 +3514,7 @@ function vrSword(k,dt){const v=VR.vis[k];if(!v)return;const m=v.obj;const tip=m.
    if(x){VR.hitCd.set(e,clock.t+.35);const dir=_va.subVectors(tip,pt.tip).setY(0);_hitPow=player.powerT>0;enemyHit(e,1.6*(player.powerT>0?2:1)*clamp(spd/5,.6,1.4),player.hands[k]||'orange',dir.clone(),'sword',x.point.clone());vrBuzz(k,1,80);}}}
  pt.tip.copy(tip);pt.mid.copy(mid);}
 function vrBow(k,dt){const bh=VR.bowHand||'L',bv=VR.vis[bh];if(!bv)return;const b=VR.btn[k],bowObj=bv.obj,grip=bowObj.getWorldPosition(new V3()),hp=VR.pp[k];const sp=bv.string.geometry.attributes.position;
- if(!VR.draw&&b.trigDown&&hp.distanceTo(grip)<.4&&bowState.cool<=0){VR.draw={k};SFX.play('draw',null,.8);}
+ if(!VR.draw&&b.trigDown&&hp.distanceTo(grip)<.55&&bowState.cool<=0){VR.draw={k};SFX.play('draw',null,.8);}
  const col=player.hands[k];let av=VR.arrowVis[col];if(!av&&col){av=VR.arrowVis[col]=buildArrow(COLHEX[col]);av.traverse(o=>{o.userData.noHit=o.userData.noCol=true;});scene.add(av);}
  if(VR.draw&&VR.draw.k===k){const d=hp.distanceTo(grip),p=clamp((d-.1)/.5,0,1);bowState.drawing=k;bowState.p=p;
   const loc=bowObj.worldToLocal(hp.clone());sp.setXYZ(1,0,clamp(loc.y,-.15,.15),Math.max(.03,loc.z));sp.needsUpdate=true;
@@ -3529,7 +3541,7 @@ function vrUI(dt){return;const P=VR.panel;if(!P)return;camera.getWorldDirection(
  x.fillStyle='#efe4c8';x.font='34px Georgia';x.fillText('Hands: '+hands+'     Back: '+nm(player.back),34,330,956);
  x.font='26px Georgia';x.fillStyle='rgba(239,228,200,.6)';x.fillText('Grip: grab / let go   Trigger: bow string   Over your shoulder: back   A: jump',34,384,956);P.tex.needsUpdate=true;}
 document.querySelectorAll('.vrBtn').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();if(!$('#start').textContent.includes('Begin')&&!started)return;vrEnter();}));
-vrCheck();window.__VR=VR;VR.renderer=renderer;VR.enter=vrEnter;VR.dbg=()=>({paused,started,ended,freeLook,frames:VR.frames,grips:Object.keys(VR.grip),ctl:Object.keys(VR.ctl),btnL:Object.keys(VR.btn.L).length});
+vrCheck();window.__VR=VR;VR.renderer=renderer;VR.enter=vrEnter;VR.find=vrFindItem;VR.atBack=vrAtBack;VR.dbg=()=>({paused,started,ended,freeLook,frames:VR.frames,grips:Object.keys(VR.grip),ctl:Object.keys(VR.ctl),btnL:Object.keys(VR.btn.L).length});
 
 function frame(now,xr){if(!xr)requestAnimationFrame(frame);if(VR.on&&!xr)return;let dt=Math.max(0,Math.min(.05,(now-clock.last)/1000));clock.last=now;
  frameAvg=lerp(frameAvg,dt*1000,.05);perfT+=dt;if(perfT>3&&started&&!VR.on){perfT=0;if(frameAvg>26&&DPR>.7){DPR=Math.max(.7,DPR-.15);resize();}}
