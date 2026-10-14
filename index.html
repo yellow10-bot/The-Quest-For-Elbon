@@ -2741,8 +2741,8 @@ function updateAlly(dt){if(!ally.root)return;const P=ally.P;if(ally.style==='rem
   if(tgt){const T2=tgt==='player'?player:tgt;const tp=T2.pos;const dx=tp.x-ally.pos.x,dz=tp.z-ally.pos.z,d=Math.hypot(dx,dz);ally.yaw=lerpAngle(ally.yaw,Math.atan2(dx,dz),dt*8);
    if(d>1.25||Math.abs(tp.y-ally.pos.y)>.7){if(Math.abs(tp.y-ally.pos.y)>.7&&(ally.pos.x>1500||ally.pos.x<-400)){const a=Math.atan2(dx,dz)+Math.PI;ally.leap={from:ally.pos.clone(),to:new V3(tp.x+Math.sin(a)*1,tp.y,tp.z+Math.cos(a)*1),t:0,dur:.6};}
     else{moveAlly(dx/d*6.8,dz/d*6.8,dt);animLegs(ally,1,dt,6.8);}P.body.position.y=lerp(P.body.position.y,0,dt*8);}
-   else{P.body.position.y=lerp(P.body.position.y,-.35,dt*8);P.armL.rotation.x=lerp(P.armL.rotation.x,-1.2,.2);P.armR.rotation.x=lerp(P.armR.rotation.x,-1.2,.2);P.torso.rotation.x=lerp(P.torso.rotation.x,.5,.2);
-    T2.reviveProg=(T2.reviveProg||0)+dt/2.4;if(Math.random()<.5)FX.emit(tp.x+rand(-.4,.4),tp.y+rand(.2,1),tp.z+rand(-.4,.4),0,.8,0,.6,.14,.02,COL.gold[0],COL.gold[1],COL.gold[2]);
+   else{P.body.position.y=lerp(P.body.position.y,-.2,dt*8);P.armR.rotation.x=lerp(P.armR.rotation.x,-2.6,.4);P.torso.rotation.x=lerp(P.torso.rotation.x,.3,.2);
+    T2.reviveProg=(T2.reviveProg||0)+dt/.3;if(T2.reviveProg>=1){SFX.play('grab',tp,.9);burst(tp.clone().setY(tp.y+1.1),40,COL.gold,3,.7,.12,.02);}if(Math.random()<.5)FX.emit(tp.x+rand(-.4,.4),tp.y+rand(.2,1),tp.z+rand(-.4,.4),0,.8,0,.6,.14,.02,COL.gold[0],COL.gold[1],COL.gold[2]);
     if(T2.reviveProg>=1){if(tgt==='player')revivePlayer();else reviveAlly(tgt);ally.reviveTarget=null;ally.reviving=false;}}
    if(!ally.leap)ally.pos.y=ally.pos.x<-400&&player.zone==='out'?groundWoodWalker(ally.pos.x,ally.pos.z,ally.pos.y):groundAt(ally.pos.x,ally.pos.z,ally.pos.y);ally.root.position.copy(ally.pos);ally.root.rotation.y=ally.yaw;return;}}
  // pick a target
@@ -3155,8 +3155,7 @@ const Quest={stage:'stones',flags:{},cinematic:false,active:null,fieldGoblins:[]
  exitTower(){if(Net.isClient()){Net.send({t:'exit'});return;}if(this.stage!=='tower')return;this.stage='outside';SFX.play('creak');fadeTo(1,500);setTimeout(()=>{enterOutside();fadeTo(0,1200);toast('You made it out!',true);
    Quest.stage='wood';setObjective('Fight through the Fallen Wood.','Goblins hide among the fallen trees and up in the tree houses. Climb the stairs to reach them.');},600);},
  dropTrap(){player.falling=true;SFX.play('creak',world.trapPos);this.trapT=0;setObjective('...');},
- resetActive(){const all=(this.acts&&this.acts.length)?[...this.acts]:(this.active?[this.active]:[]);if(!all.length)return;for(const enc of all){if(enc.id==='boss'){this.bossT=0;if(world.bTrap)world.bTrap.want=0;}for(const e of enc.list)removeEnemy(e);enc.list=[];enc.pend=[];enc.state='idle';enc.wave=0;enc.delay=0;}this.acts=[];this.active=null;setRaid(null);
-  if(enc.id==='raid')world.lockMark.material.color.setRGB(3,1.6,.5);}
+ resetActive(){const all=(this.acts&&this.acts.length)?[...this.acts]:(this.active?[this.active]:[]);if(!all.length)return;for(const enc of all){if(enc.id==='boss'){this.bossT=0;if(world.bTrap)world.bTrap.want=0;}for(const e of enc.list)removeEnemy(e);enc.list=[];enc.pend=[];enc.state='idle';enc.wave=0;enc.delay=0;if(enc.id==='raid'&&world.lockMark)world.lockMark.material.color.setRGB(3,1.6,.5);}this.acts=[];this.active=null;setRaid(null);}
 };
 function enterMine(){setTimeout(()=>Net.broadcast({t:'zone',z:'mine',p:[player.pos.x,0,player.pos.z]}),400);player.zone='mine';OUT.visible=false;MINE.visible=true;sky.visible=false;sun.intensity=0;sun.castShadow=false;hemi.intensity=1.15;hemi.color.set(0x9ab4d8);hemi.groundColor.set(0x5a4636);
  scene.fog.color.copy(FOG_MINE);scene.fog.density=0.012;if(GRASS_MAT)GRASS_MAT.uniforms.fogDensity.value=.012;if(finalPass)finalPass.uniforms.exposure.value=1.75;
@@ -3323,7 +3322,7 @@ function revivePlayer(){player.down=false;player.alive=true;player.hp=5;player.i
 function reviveAlly(A){if(A.style==='remote'){A.up=true;A.reviveProg=0;Net.sendTo(A.netId,{t:'revive'});toast(A.name+' is back up!');return;}A.up=true;A.hp=Math.ceil(A.maxHp*.6);A.mode='follow';A.reviveProg=0;A.lastHurt=clock.t;const p=ally;ally=A;drawTag();ally=p;SFX.play('potion',A.pos);burst(allyChestOf(A),30,COL.gold,3,.6,.12,.02);toast(A.name+' is back up!');}
 let wipeT=null;function checkWipe(){if(wipeT||Net.isClient())return;if(player.down&&!allies.some(A=>A.up)){wipeT=setTimeout(()=>{wipeT=null;if(player.down&&!allies.some(A=>A.up))playerDie();},1500);}}
 function playerDie(src){RUN.wipes++;player.alive=false;player.down=false;bowState.drawing=null;$('#downmsg').classList.add('hidden');$('#revive').classList.add('hidden');$('#dead').classList.remove('hidden');fadeTo(.85,800);setRaid(null);
- setTimeout(()=>{Quest.resetActive();for(const p of eproj)scene.remove(p.mesh);eproj.length=0;
+ setTimeout(()=>{try{Quest.resetActive();}catch(e){console.error(e);}try{for(const p of eproj)scene.remove(p.mesh);eproj.length=0;}catch(e){}
   if(Quest.stage==='field'||Quest.stage==='supplies'){for(const e of Quest.fieldGoblins)if(e.alive){e.pos.copy(e.home||e.pos);}}
   const cp=player.checkpoint||{pos:new V3(0,0,12.7),yaw:0};player.pos.copy(cp.pos);Net.broadcast({t:'wipe',p:[cp.pos.x,cp.pos.y,cp.pos.z]});player.yaw=cp.yaw;player.pitch=0;player.vel.set(0,0,0);player.hp=player.maxHp;player.alive=true;
   player.shieldHp=3;player.shieldBroken=0;player.carry=null;player.invuln=clock.t+2;forAllies(()=>{ally.reviveProg=0;ally.reviveTarget=null;ally.up=true;ally.hp=ally.maxHp;ally.mode='follow';ally.shieldHp=3;ally.shieldBroken=0;ally.leap=null;drawTag();placeAllyNearPlayer();});$('#dead').classList.add('hidden');fadeTo(0,800);updateHUD();toast('Back on your feet.');},2600);}
